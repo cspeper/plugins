@@ -1,31 +1,46 @@
 ---
 name: "sentry"
-description: "Use when the user asks to inspect Sentry issues or events, summarize recent production errors, or pull basic Sentry health data via the Sentry API; perform read-only queries with the bundled script and require `SENTRY_AUTH_TOKEN`."
+description: "Use when the user asks to inspect Sentry issues or events, summarize recent production errors, or pull basic Sentry health data. Prefer connected Sentry MCP tools; use the bundled read-only API script with `SENTRY_AUTH_TOKEN` only as a fallback."
 ---
 
 
 # Sentry (Read-only Observability)
 
-## Quick start
+## Routing and authentication
 
-- If not already authenticated, ask the user to provide a valid `SENTRY_AUTH_TOKEN` (read-only scopes such as `project:read`, `event:read`) or to log in and create one before running commands.
-- Set `SENTRY_AUTH_TOKEN` as an env var.
-- Optional defaults: `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_BASE_URL`.
-- Defaults: org/project `{your-org}`/`{your-project}`, time range `24h`, environment `prod`, limit 20 (max 50).
-- Always call the Sentry API (no heuristics, no caching).
+1. Check the active tool catalog for Sentry provider tools before inspecting local credentials or running the bundled script.
+   - When Sentry tools are available, use them directly. Do not check `SENTRY_AUTH_TOKEN` first.
+   - If connection status is uncertain, make the narrowest relevant read-only call. For example, find organizations when an organization slug is not known.
+   - Treat the provider tool's authentication or connection result as authoritative. A missing local environment variable says nothing about the connected plugin.
+2. Use the bundled script only when Sentry provider tools are unavailable, the provider route cannot authenticate, or the user explicitly requests the local script/API path.
+   - Set `SENTRY_AUTH_TOKEN` as an environment variable with read-only scopes such as `project:read`, `event:read`, and `org:read`.
+   - Optional defaults: `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_BASE_URL`.
+   - Never ask the user to paste the full token in chat. Ask them to set it locally and confirm when ready.
+3. Always query Sentry directly. Do not substitute heuristics or cached results.
 
-If the token is missing, give the user these steps:
+If the fallback is required and the token is missing, give the user these steps:
+
 1. Create a Sentry auth token: https://sentry.io/settings/account/api/auth-tokens/
 2. Create a token with read-only scopes such as `project:read`, `event:read`, and `org:read`.
 3. Set `SENTRY_AUTH_TOKEN` as an environment variable in their system.
 4. Offer to guide them through setting the environment variable for their OS/shell if needed.
-- Never ask the user to paste the full token in chat. Ask them to set it locally and confirm when ready.
 
-## Core tasks (use bundled script)
+Do not say that Sentry is unavailable, unconfigured, or unauthenticated based only on a missing local token.
 
-Use `scripts/sentry_api.py` for deterministic API calls. It handles pagination and retries once on transient errors.
+## Core tasks (connected tools)
 
-## Bundled script path
+- Use the Sentry issue-search tool for grouped issue lists.
+- Use the Sentry event-search tool for individual events, logs, counts, aggregations, or time series.
+- Use the Sentry resource tool for a specific issue, event, trace, replay, monitor, or other supported Sentry URL.
+- Use the organization and project discovery tools only when the required slug is not already known.
+- When no direct tool fits, search the Sentry tool catalog before deciding that the operation is unavailable.
+- Keep this workflow read-only. Do not use mutation tools.
+
+## Fallback: bundled script
+
+Use `scripts/sentry_api.py` for deterministic API calls when the connected-tool route is unavailable. It handles pagination and retries once on transient errors.
+
+### Bundled script path
 
 ```bash
 export SENTRY_API="plugins/sentry/skills/sentry/scripts/sentry_api.py"
@@ -91,7 +106,7 @@ python3 "$SENTRY_API" \
   abcdef1234567890
 ```
 
-## API requirements
+## Fallback API requirements
 
 Always use these endpoints (GET only):
 
@@ -126,3 +141,9 @@ Always use these endpoints (GET only):
 
 Example prompt: “List the top 10 open issues for prod in the last 24h.”
 Expected: ordered list with titles, short IDs, counts, last seen.
+
+Routing expectations:
+
+- Connected Sentry tools plus no `SENTRY_AUTH_TOKEN`: use the connected tools without mentioning the token.
+- No connected Sentry tools plus a configured token: use the bundled script.
+- Neither route available: explain that connected tools are unavailable, then provide the local-token setup steps.
